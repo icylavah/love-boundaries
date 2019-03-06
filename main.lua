@@ -1,25 +1,66 @@
 local bounds = require 'boundaries'
-local color = require 'boundaries.color'
-local field = require 'boundaries.field'
-local flux = require 'flux'
+local button = require 'boundaries.button'
+local color  = require 'boundaries.color'
+local font   = require 'boundaries.font'
+
+local fontBig
+
+local example
+local examples = {
+	'examples/example1',
+}
+
+local buttons
+local function action(self) example = require(self.path)() end
+local function draw(self)
+	bounds.solid(1, 1, 1)
+	color.push(0, 0, 0)
+	font.push(fontBig)
+	bounds.label(self.path, 'center', 'center')
+	font.pop()
+	color.pop()
+end
 
 function love.load(arg)
-	f = field()
-	f.font = love.graphics.newFont(16)
-	f.text = "hello world"
-end
-
-function love.update(dt)
+	fontBig = love.graphics.newFont(24)
 	
+	buttons = {}
+	for _,p in ipairs(examples) do
+		local b = button()
+		b.path = p
+		b.action = action
+		b.draw = draw
+		b.font = font
+		
+		table.insert(buttons, b)
+	end
 end
 
-function love.draw()
+local function picker()
 	bounds.clearCaptures()
 	
 	bounds.push()
-	bounds.solid(1, 1, 1, 1)
-	f:place()
+	
+	local r = {}
+	for i = 1, #buttons do r[i] = 1 end
+	
+	bounds.slice('vertical', r)
+	for _,b in ipairs(buttons) do
+		bounds.align('center', 'center', bounds.getWidth() - 32, 50)
+		b:place()
+		bounds.pop()
+		bounds.next()
+	end
+	
 	bounds.pop()
+end
+
+function love.draw()
+	if example then
+		example()
+	else
+		picker()
+	end
 end
 
 function love.mousepressed(...)
