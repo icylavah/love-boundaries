@@ -95,35 +95,16 @@ local function pop(n)
 	end
 end
 
---[[
 local horizontal = {vertical = false, horizontal = true}
 local function slice(layout, r)
-	layout = horizontal[layout]
-	local x1, y1, x2, y2 = unpack(stack[#stack])
-	
-	local d1, d2, s1, s2
-	if layout then d1, d2, s1, s2 = x1, x2, y1, y2 else d1, d2, s1, s2 = y1, y2, x1, x2 end
-	local widths, len = ratios(d2 - d1, r), #r
-	
-	local borders = {d1}
-	for i = 1, len do
-		borders[i + 1] = borders[i] + widths[i]
+	if type(r) == 'number' then
+		local t = {}
+		for i = 1, r do
+			t[i] = 1
+		end
+		r = t
 	end
 	
-	if layout then
-		for i = len, 1, -1 do
-			push(borders[i], y1, borders[i + 1], y2)
-		end
-	else
-		for i = len, 1, -1 do
-			push(x1, borders[i], x2, borders[i + 1])
-		end
-	end
-end
---]]
-
-local horizontal = {vertical = false, horizontal = true}
-local function slice(layout, r)
 	layout = horizontal[layout]
 	local x1, y1, x2, y2 = unpack(stack[#stack])
 	
@@ -463,4 +444,7 @@ return {
 	getFocused = getFocused,
 	isFocused = isFocused,
 	clearCaptures = clearCaptures,
+	scissor = scissor,
+	color = color,
+	font = font,
 }

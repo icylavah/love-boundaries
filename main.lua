@@ -6,9 +6,7 @@ local font   = require 'boundaries.font'
 local fontBig
 
 local example
-local examples = {
-	'examples/example1',
-}
+local examples = require 'examples.list'
 
 local buttons
 local function action(self) example = require(self.path)() end

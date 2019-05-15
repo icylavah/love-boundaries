@@ -9,6 +9,9 @@
 			"windows": {
                 "command": ".\\run.cmd"
 			},
+			"linux": {
+                "command": "./run.sh"
+			},
 			"group": "test",
 		},
 		{
@@ -16,6 +19,9 @@
 			"type": "shell",
 			"windows": {
                 "command": ".\\run.cmd"
+			},
+			"linux": {
+                "command": "./run.sh"
 			},
 			"args": [
 				"--debug"
