@@ -152,6 +152,18 @@ local function slice(layout, r)
 			push(x1, borders[i], x2, borders[i + 1])
 		end
 	end
+	
+	-- return iterator
+	local i = 0
+	return function()
+		i = i + 1
+		if i > len then
+			pop()
+			return nil
+		end
+		if i ~= 1 then pop() end
+		return i, widths[i]
+	end
 end
 
 local function pad(right, top, left, bottom)

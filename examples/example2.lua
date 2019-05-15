@@ -38,12 +38,9 @@ return function()
 					font.push(fontBig)
 						local f = font.get()
 						local lines = love.graphics.getHeight() / (f:getHeight() * f:getLineHeight())
-						lines = math.max(1, math.floor(lines))
 						
-						bounds.slice('vertical', lines)
-						for i = 1, lines do
+						for _ in bounds.slice('vertical', math.max(1, math.floor(lines))) do
 							bounds.label(text, 'center', 'center')
-							bounds.next()
 						end
 					font.pop()
 				color.pop()
@@ -58,11 +55,9 @@ return function()
 		local text = 'love-boundaries'
 		
 		return function(t)
-			bounds.slice(orientation, weightFunction(t))
-				rectangle(text, fromColor)
-				bounds.next()
-				rectangle(text, toColor)
-			bounds.pop()
+			for i in bounds.slice(orientation, weightFunction(t)) do
+				rectangle(text, select(i, fromColor, toColor))
+			end
 		end
 	end
 	
