@@ -97,6 +97,16 @@ end
 
 local cantParse = 'boundaries.pixelLengths(): Can not parse weight #%d: \'%s\''
 
+local parseNumber = {
+	['([%d%.%-%+]+)%s*px'] = function(number)
+		return tonumber(number)
+	end,
+	['([%d%.%-%+]+)%s*%%'] = function(number, w)
+		local n, err = tonumber(number)
+		if not n then return nil, err end
+		return w * n / 100
+	end
+}
 local function pixelLengths(r, w)
 	-- if the ratio is just a number then fill up a table with ones
 	if type(r) == 'number' then
@@ -109,12 +119,20 @@ local function pixelLengths(r, w)
 	
 	-- parse values with modifiers and store them, store weights in a different table
 	local widths, weights = {}, {}
+	local wTotal = w
 	for i,v in ipairs(r) do
 		if type(v) == 'string' then
-			local n = v:lower():match('([%d%.%-%+]+)%s*px')
-			assert(n, cantParse:format(i, v))
+			local m, parser
+			for k,p in pairs(parseNumber) do
+				m = v:lower():match(k)
+				if m then
+					parser = p
+					break
+				end
+			end
+			assert(m, cantParse:format(i, v))
 			
-			widths[i] = round(assert(tonumber(n), cantParse:format(i, v)))
+			widths[i] = round(assert(parser(m, wTotal), cantParse:format(i, v)))
 			w = w - widths[i]
 		else
 			table.insert(weights, v)
@@ -185,12 +203,36 @@ local function slice(layout, r)
 	end
 end
 
-local function pad(right, top, left, bottom)
-	if not (top or left or bottom) then
-		top, left, bottom = right, right, right
-	end
+local function _pad(top, right, bottom, left)
 	local x1, y1, x2, y2 = getBounds()
-	push(x1 + left, y1 + top, x2 - right, y2 - bottom)
+	if type(top) == 'number' then top = top * 100 .. '%' end
+	if type(right) == 'number' then right = right * 100 .. '%' end
+	if type(bottom) == 'number' then bottom = bottom * 100 .. '%' end
+	if type(left) == 'number' then left = left * 100 .. '%' end
+	local h = pixelLengths({left, right}, x2 - x1)
+	local v = pixelLengths({top, bottom}, y2 - y1)
+	push(x1 + h[1], y1 + v[1], x2 - h[2], y2 - v[2])
+end
+
+local padArgs = {
+	function(all)
+		_pad(all, all, all, all)
+	end,
+	function(tb, lr)
+		_pad(tb, lr, tb, lr)
+	end,
+	function(top, lr, bottom)
+		_pad(top, lr, bottom, lr)
+	end,
+	_pad,
+}
+
+local function pad(...)
+	local f = padArgs[select('#', ...)]
+	if not f then
+		assert('boundaries.pad(): invalid number of arguments')
+	end
+	f(...)
 end
 
 local a = {left = 0, top = 0, center = 0.5, right = 1, bottom = 1}

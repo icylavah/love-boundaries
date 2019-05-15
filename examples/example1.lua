@@ -16,7 +16,7 @@ return function()
 				for i,w in bounds.slice('vertical', lines) do
 					bounds.solid(unpack((select(i % 2 + 1, {0.8, 0.5, 0.5}, {0.3, 0.3, 0.5}))))
 					color.push(unpack((select(i % 2 + 1, {0.2, 0.05, 0.05}, {0.8, 0.8, 0.9}))))
-						bounds.pad(32, 0, 32, 0)
+						bounds.pad(0, 32 .. 'px')
 						bounds.label(i, lines > 1 and ((i - 1) / (lines - 1)) or 'center', 'center')
 						bounds.pop()
 					color.pop()
