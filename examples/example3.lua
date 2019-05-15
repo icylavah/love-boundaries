@@ -6,7 +6,7 @@ return function()
 	
 	local format, min, max = string.format, math.min, math.max
 	
-	local fontBig = love.graphics.newFont(32)
+	local fontBig = love.graphics.newFont(24)
 	
 	return function()
 		bounds.push()

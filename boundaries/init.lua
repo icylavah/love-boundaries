@@ -88,15 +88,17 @@ end
 
 local function pop(n)
 	n = n or 1
-	assert(#stack >= n, 'ui.pop(): Popped too many times.')
+	assert(#stack >= n, 'bounds.pop(): Popped too many times.')
 	local len = #stack + 1
 	for i = 1, n do
 		stack[len - i] = nil
 	end
 end
 
-local horizontal = {vertical = false, horizontal = true}
-local function slice(layout, r)
+local cantParse = 'boundaries.pixelLengths(): Can not parse weight #%d: \'%s\''
+
+local function pixelLengths(r, w)
+	-- if the ratio is just a number then fill up a table with ones
 	if type(r) == 'number' then
 		local t = {}
 		for i = 1, r do
@@ -105,56 +107,51 @@ local function slice(layout, r)
 		r = t
 	end
 	
-	layout = horizontal[layout]
-	local x1, y1, x2, y2 = unpack(stack[#stack])
-	
-	local d1, d2, s1, s2
-	if layout then d1, d2, s1, s2 = x1, x2, y1, y2 else d1, d2, s1, s2 = y1, y2, x1, x2 end
-	
-	local w = d2 - d1
-	
-	local len = #r
-	
-	local rsum, ssum = 0, 0
-	local rwidths, swidths = {}, {}
-	for i = 1, len do
-		local ri = r[i]
-		if type(ri) == 'string' then
-			local n = ri:lower():match('([%d%.%-%+]+)%s*px')
-			assert(n, 'ui.slice(): Can not parse ratio number')
-			n = tonumber(n) / (w - 1)
-			r[i] = n
-			ssum = ssum + n
+	-- parse values with modifiers and store them, store weights in a different table
+	local widths, weights = {}, {}
+	for i,v in ipairs(r) do
+		if type(v) == 'string' then
+			local n = v:lower():match('([%d%.%-%+]+)%s*px')
+			assert(n, cantParse:format(i, v))
+			
+			widths[i] = round(assert(tonumber(n), cantParse:format(i, v)))
+			w = w - widths[i]
 		else
-			table.insert(rwidths, {i, ri})
-			rsum = rsum + ri
+			table.insert(weights, v)
 		end
 	end
 	
-	for j = 1, #rwidths do
-		local i, ri = unpack(rwidths[j])
-		r[i] = ri / rsum * (1 - ssum)
+	-- turn weights into pixel lenghts and put them in the gaps
+	local j = 1
+	for _,v in ipairs(ratios(w, weights)) do
+		while widths[j] do j = j + 1 end
+		widths[j] = v
 	end
 	
-	local widths = ratios(w, r)
+	return widths
+end
+
+-- split up the current bounds into rectangles based on the supplied weights
+local function grid(rh, rv)
+	local x1, y1, x2, y2 = getBounds()
+	rh, rv = pixelLengths(rh, x2 - x1), pixelLengths(rv, y2 - y1)
+	rhLen, rvLen = #rh, #rv
 	
-	local borders = {d1}
-	for i = 1, len do
-		borders[i + 1] = borders[i] + widths[i]
-	end
-	
-	if layout then
-		for i = len, 1, -1 do
-			push(borders[i], y1, borders[i + 1], y2)
+	-- push the rectangles onto the stack in reverse order
+	local lastBorderV = y2
+	for j = rvLen, 1, -1 do
+		local currentBorderV = lastBorderV - rv[j]
+		local lastBorderH = x2
+		for i = rhLen, 1, -1 do
+			local currentBorderH = lastBorderH - rh[i]
+			push(currentBorderH, currentBorderV, lastBorderH, lastBorderV)
+			lastBorderH = currentBorderH
 		end
-	else
-		for i = len, 1, -1 do
-			push(x1, borders[i], x2, borders[i + 1])
-		end
+		lastBorderV = currentBorderV
 	end
 	
 	-- return iterator
-	local i = 0
+	local i, len = 0, rhLen * rvLen
 	return function()
 		i = i + 1
 		if i > len then
@@ -162,7 +159,29 @@ local function slice(layout, r)
 			return nil
 		end
 		if i ~= 1 then pop() end
-		return i, widths[i]
+		return (i - 1) % rhLen + 1, floor((i - 1) / rhLen) + 1
+	end
+end
+
+-- split up the current bounds into rectangles based on the supplied weights
+local function slice(layout, r)
+	layout = layout == 'horizontal'
+	if layout then
+		grid(r, 1)
+	else
+		grid(1, r)
+	end
+	
+	-- return iterator
+	local i, len = 0, type(r) == 'number' and r or #r
+	return function()
+		i = i + 1
+		if i > len then
+			pop()
+			return nil
+		end
+		if i ~= 1 then pop() end
+		return i, layout and getWidth() or getHeight()
 	end
 end
 
@@ -428,6 +447,7 @@ return {
 	push = push,
 	ratios = ratios,
 	slice = slice,
+	grid = grid,
 	pad = pad,
 	getRectangle = getRectangle,
 	getPosition = getPosition,
