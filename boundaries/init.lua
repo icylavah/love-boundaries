@@ -229,9 +229,7 @@ local padArgs = {
 
 local function pad(...)
 	local f = padArgs[select('#', ...)]
-	if not f then
-		assert('boundaries.pad(): invalid number of arguments')
-	end
+	assert(f, 'boundaries.pad(): invalid number of arguments')
 	f(...)
 end
 
