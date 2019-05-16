@@ -480,6 +480,10 @@ local function label(text, horizontal, vertical)
 	pop()
 end
 
+local function update(dt)
+	clearCaptures()
+end
+
 return {
 	stack = stack,
 	ratios = ratios,
@@ -518,6 +522,7 @@ return {
 	getFocused = getFocused,
 	isFocused = isFocused,
 	clearCaptures = clearCaptures,
+	update = update,
 	scissor = scissor,
 	color = color,
 	font = font,

@@ -68,7 +68,6 @@ return function()
 	local choice = {one, two, three, four}
 	
 	return function()
-		bounds.clearCaptures()
 		bounds.push()
 		choice[stage()](animate())
 		bounds.pop()

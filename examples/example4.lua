@@ -15,9 +15,11 @@ return function()
 		for x,y in bounds.grid({1, 2, 3}, 3) do
 			local i = x + (y - 1) * 3
 			bounds.solid(unpack((select(i % 2 + 1, {0.8, 0.8, 0.8}, {0.2, 0.2, 0.2}))))
+			scissor.pushIntersect(bounds.getRectangle())
 			color.push(unpack((select(i % 2 + 1, {0.2, 0.2, 0.2}, {0.8, 0.8, 0.8}))))
 			bounds.label(x .. ',' .. y, 0.5, 0.5)
 			color.pop()
+			scissor.pop()
 		end
 		
 		font.pop()

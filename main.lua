@@ -53,6 +53,10 @@ local function picker()
 	bounds.pop()
 end
 
+function love.update(dt)
+	bounds.update(dt)
+end
+
 function love.draw()
 	if example then
 		example()

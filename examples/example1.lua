@@ -7,7 +7,6 @@ return function()
 	local fontBig = love.graphics.newFont(48)
 	
 	return function()
-		bounds.clearCaptures()
 		bounds.push()
 			font.push(fontBig)
 				local f = font.get()
