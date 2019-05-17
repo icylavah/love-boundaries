@@ -1,4 +1,6 @@
 local stackLimit = 256
+local function getStackLimit() return stackLimit end
+local function setStackLimit(limit) stackLimit = limit end
 
 local req = ...
 local function tryRequire(mod)
@@ -540,8 +542,16 @@ return setmetatable({
 	isFocused = isFocused,
 	clearCaptures = clearCaptures,
 	update = update,
-}, {__index = function(t, k)
-	local mod = tryRequire(k)
-	if mod then t[k] = mod end
-	return mod
-end})
+	getStackLimit = getStackLimit,
+	setStackLimit = setStackLimit,
+}, {
+	__index = function(t, k)
+		local mod = tryRequire(k)
+		if mod then t[k] = mod end
+		return mod
+	end,
+	__call = function(t, limit)
+		setStackLimit(limit)
+		return t
+	end
+})
