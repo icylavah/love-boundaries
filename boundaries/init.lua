@@ -88,14 +88,14 @@ end
 
 local lgw, lgh = love.graphics.getWidth, love.graphics.getHeight
 local function push(x1, y1, x2, y2)
-	assert(#stack < stackLimit, 'ui.push(): Stack limit exeeded. Did you forget a ui.pop()?')
+	assert(#stack < stackLimit, 'boundaries.push(): Stack limit exeeded. Did you forget a boundaries.pop()?')
 	x1, y1, x2, y2 = x1 or 0, y1 or 0, x2 or lgw(), y2 or lgh()
 	table.insert(stack, {x1, y1, x2, y2})
 end
 
 local function pop(n)
 	n = n or 1
-	assert(#stack >= n, 'bounds.pop(): Popped too many times.')
+	assert(#stack >= n, 'boundaries.pop(): Popped too many times.')
 	local len = #stack + 1
 	for i = 1, n do
 		stack[len - i] = nil
