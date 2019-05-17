@@ -1,8 +1,15 @@
 local stackLimit = 256
 
-local scissor = require(... .. '.scissor')
-local color = require(... .. '.color')
-local font = require(... .. '.font')
+local req = ...
+local function tryRequire(mod)
+	local status, result = pcall(require, req .. '.' .. mod)
+	if status then return result end
+	return nil, result
+end
+
+local scissor = tryRequire('scissor')
+local color   = tryRequire('color')
+local font    = tryRequire('font')
 
 local stack = {}
 
@@ -482,7 +489,7 @@ local function update(dt)
 	clearCaptures()
 end
 
-return {
+return setmetatable({
 	stack = stack,
 	ratios = ratios,
 	getBounds = getBounds,
@@ -521,7 +528,8 @@ return {
 	isFocused = isFocused,
 	clearCaptures = clearCaptures,
 	update = update,
-	scissor = scissor,
-	color = color,
-	font = font,
-}
+}, {__index = function(t, k)
+	local mod = tryRequire(k)
+	if mod then t[k] = mod end
+	return mod
+end})

@@ -1,7 +1,7 @@
 local bounds = require 'boundaries'
-local button = require 'boundaries.button'
-local color  = require 'boundaries.color'
-local font   = require 'boundaries.font'
+local button = bounds.button
+local color  = bounds.color
+local font   = bounds.font
 
 local fontBig
 
