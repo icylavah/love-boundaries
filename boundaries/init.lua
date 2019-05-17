@@ -10,6 +10,7 @@ end
 local scissor = tryRequire('scissor')
 local color   = tryRequire('color')
 local font    = tryRequire('font')
+local canvas  = tryRequire('canvas')
 
 local stack = {}
 
@@ -87,9 +88,20 @@ local function getHeight()
 end
 
 local lgw, lgh = love.graphics.getWidth, love.graphics.getHeight
+local function getScreenWidth()
+	local c = canvas.get()
+	if c then return c:getWidth() end
+	return lgw()
+end
+local function getScreenHeight()
+	local c = canvas.get()
+	if c then return c:getHeight() end
+	return lgh()
+end
 local function push(x1, y1, x2, y2)
 	assert(#stack < stackLimit, 'boundaries.push(): Stack limit exeeded. Did you forget a boundaries.pop()?')
-	x1, y1, x2, y2 = x1 or 0, y1 or 0, x2 or lgw(), y2 or lgh()
+	x1, y1 = x1 or 0, y1 or 0
+	x2, y2 = x2 or (getScreenWidth() + x1), y2 or (getScreenHeight() + y1)
 	table.insert(stack, {x1, y1, x2, y2})
 end
 
