@@ -1,4 +1,7 @@
 local stackLimit = 256
+local captures, captureIndex, focused, hovered
+local weakKeys = {__mode = 'k'}
+
 local function getStackLimit() return stackLimit end
 local function setStackLimit(limit) stackLimit = limit end
 
@@ -16,7 +19,7 @@ local canvas  = tryRequire('canvas')
 
 local stack = {}
 
-local floor, min, max = math.floor, math.min, math.max
+local floor, min, max, format = math.floor, math.min, math.max, string.format
 
 local function round(x) return floor(x + 0.5) end
 
@@ -52,41 +55,50 @@ local function ratios(available, ...)
 	return distributed_amounts
 end
 
-local function getBounds()
+local function getBounds(c)
+	if c then
+		c = captures[captureIndex[c] or false]
+		if c then return unpack(c[2]) end
+		return nil
+	end
 	return unpack(stack[#stack])
 end
 
-local function getRectangle()
-	local x1, y1, x2, y2 = getBounds()
-	return x1, y1, x2 - x1, y2 - y1
+local function getRectangle(c)
+	local x1, y1, x2, y2 = getBounds(c)
+	if x1 then return x1, y1, x2 - x1, y2 - y1 end
+	return nil
 end
 
-local function getPosition()
-	local x, y = getBounds()
+local function getPosition(c)
+	local x, y = getBounds(c)
 	return x, y
 end
 
-local function getDimensions()
-	local x1, y1, x2, y2 = getBounds()
-	return x2 - x1, y2 - y1
+local function getDimensions(c)
+	local x1, y1, x2, y2 = getBounds(c)
+	if x1 then return x2 - x1, y2 - y1 end
+	return nil
 end
 
-local function getX()
-	return (getBounds())
+local function getX(c)
+	return (getBounds(c))
 end
 
-local function getY()
-	return select(2, getBounds())
+local function getY(c)
+	return select(2, getBounds(c))
 end
 
-local function getWidth()
-	local x1, y1, x2, y2 = getBounds()
-	return x2 - x1
+local function getWidth(c)
+	local x1, y1, x2, y2 = getBounds(c)
+	if x1 then return x2 - x1 end
+	return nil
 end
 
-local function getHeight()
-	local x1, y1, x2, y2 = getBounds()
-	return y2 - y1
+local function getHeight(c)
+	local x1, y1, x2, y2 = getBounds(c)
+	if x1 then return y2 - y1 end
+	return nil
 end
 
 local lgw, lgh = love.graphics.getWidth, love.graphics.getHeight
@@ -278,43 +290,65 @@ local function translate(x, y)
 	push(s[1] + x, s[2] + y, s[3] + x, s[4] + y)
 end
 
-local function isInBounds(x, y)
-	local x1, y1, x2, y2 = getBounds()
-	local sx1, sy1, sw, sh = scissor.get()
-	if sx1 then
-		sx2, sy2 = sx1 + sw, sy1 + sh
-		x1, y1, x2, y2 = max(x1, sx1), max(y1, sy1), min(x2, sx2), min(y2, sy2)
-	end
-	return x >= x1 and x < x2 and y >= y1 and y < y2
-end
-
-local function isHovered(checker, ...)
-	local mx, my = love.mouse.getPosition()
-	return checker(mx, my, ...)
-end
-
 local releaseCallback = {
-	[false] = {},
-	[true] = {}
+	[false] = setmetatable({}, weakKeys),
+	[true]  = setmetatable({}, weakKeys),
 }
 
-local captures, focused
+local checkRelation
+checkRelation = {
+	self = function(self, other)
+		return self == other and 0 or false
+	end,
+	super = function(self, other)
+		local t = self
+		local i = 0
+		while t do
+			if other == t then return i end
+			t = t.parent
+			i = i - 1
+		end
+		return false
+	end,
+	sub = function(self, other)
+		local t = other
+		local i = 0
+		while t do
+			if self == t then return i end
+			t = t.parent
+			i = i + 1
+		end
+		return false
+	end,
+	any = function(self, other)
+		return checkRelation.sub(self, other) or checkRelation.super(self, other)
+	end,
+}
+
+local function isHovered(self, type)
+	local rel = assert(checkRelation[type or 'self'], format('boundaries.isHovered(): invalid hover type \'%s\'', type))
+	return rel(self, hovered)
+end
 
 local function clearCaptures()
-	captures = {}
+	captures      = {}
+	captureIndex = setmetatable({}, weakKeys)
 end
 clearCaptures()
 
 local function capture(t)
-	captures[#captures + 1] = {t, stack[#stack], {scissor.get()}}
+	local i = #captures + 1
+	captures[i] = {t, stack[#stack], {scissor.get()}}
+	captureIndex[t] = i
 end
 
 local function getFocused()
 	return focused
 end
 
-local function isFocused(t)
-	return t == focused
+local function isFocused(self, type)
+	local rel = assert(checkRelation[type or 'self'], format('boundaries.isFocused(): invalid focus type \'%s\'', type))
+	return rel(self, focused)
 end
 
 local function defocus(t)
@@ -322,19 +356,28 @@ local function defocus(t)
 end
 
 local function focus(t)
-	if focused ~= t then
-		if type(t.focus) == 'function' and t:focus(focused) or t.focus ~= false then
-			focused = t
+	if focused ~= t and captureIndex[t] then
+		local allow = true
+		if focused and focused.focus then
+			allow = focused:focus(false, t)
+			if allow == nil then allow = true end
+		end
+		if allow then
+			if t and t.focus then
+				allow = t:focus(true, focused)
+				if allow == nil then allow = true end
+			end
+			if allow then
+				focused = t
+				return true
+			end
 		end
 	end
+	return false
 end
 
 local function findActive(cbt, t)
-	for i = 1, 10 do
-		if cbt[i] and cbt[i][1] == t then
-			return true
-		end
-	end
+	for k,v in pairs(cbt) do if v[1] == t then return true end end
 end
 
 local function isActive(t)
@@ -346,19 +389,16 @@ local function isActive(t)
 end
 
 local function mousepressed(x, y, button, istouch, ...)
-	for i = #captures, 1, -1 do
+	local i = captureIndex[hovered or false]
+	if i then
 		local t, stack, s = unpack(captures[i])
 		push(unpack(stack))
 		scissor.push(unpack(s))
-		local mp = t.mousepressed
-		if (type(mp) == 'function' and mp(t, x, y, button, istouch, ...)) or
-		(type(mp) == 'table' and mp[button] and (mp[button])(t, x, y, button, istouch, ...)) or
-		(mp ~= false and (t.isHovered or isInBounds)(x, y)) then
-			releaseCallback[istouch][button] = {t, stack, s}
-			focus(t)
-			scissor.pop()
-			pop()
-			break
+		focus(t)
+		if focused == t then
+			if t.mousepressed and t:mousepressed(x, y, button, istouch, ...) or t.mousepressed == nil then
+				releaseCallback[istouch][button] = captures[i]
+			end
 		end
 		scissor.pop()
 		pop()
@@ -369,15 +409,10 @@ local function mousereleased(x, y, button, istouch, ...)
 	local cb = releaseCallback[istouch][button]
 	if cb then
 		local t, stack, s = unpack(cb)
-		local mr = t.mousereleased
-		if t.mousereleased then
+		if t.mousereleased and captureIndex[t] then
 			push(unpack(stack))
 			scissor.push(unpack(s))
-			if type(mr) == 'function' then
-				mr(t, x, y, button, istouch, ...)
-			elseif type(mr) == 'table' and mr[button] then
-				mr[button](t, x, y, button, istouch, ...)
-			end
+			t:mousereleased(x, y, button, istouch, ...)
 			scissor.pop()
 			pop()
 		end
@@ -385,76 +420,126 @@ local function mousereleased(x, y, button, istouch, ...)
 	releaseCallback[istouch][button] = nil
 end
 
+local keyReleaseCallback = setmetatable({}, weakKeys)
+
 local function keypressed(key, ...)
-	if focused and focused.keypressed then
-		for i = #captures, 1, -1 do
-			local t, stack, s = unpack(captures[i])
-			if isFocused(t) then
+	local i = captureIndex[focused or false]
+	if i then
+		local t, stack, s = unpack(captures[i])
+		while t do
+			i = captureIndex[t]
+			if i then
+				local t, stack, s = unpack(captures[i])
 				push(unpack(stack))
 				scissor.push(unpack(s))
-				if type(focused.keypressed) == 'function' then
-					focused.keypressed(t, key, ...)
-				elseif type(focused.keypressed) == 'table' and focused.keypressed[key] then
-					focused.keypressed[key](t, key, ...)
+				if t.keypressed and t:keypressed(key, ...) or t.keypressed == nil then
+					keyReleaseCallback[key] = captures[i]
+					scissor.pop()
+					pop()
+					return
 				end
 				scissor.pop()
 				pop()
-				break
 			end
+			t = t.parent
 		end
 	end
 end
 
-local function keyreleased(...)
-	if focused and focused.keyreleased then
-		for i = #captures, 1, -1 do
-			local t, stack, s = unpack(captures[i])
-			if isFocused(t) then
-				push(unpack(stack))
-				scissor.push(unpack(s))
-				if type(focused.keyreleased) == 'function' then
-					focused.keyreleased(t, key, ...)
-				elseif type(focused.keyreleased) == 'table' and focused.keyreleased[key] then
-					focused.keyreleased[key](t, key, ...)
-				end
-				scissor.pop()
-				pop()
-				break
-			end
+local function keyreleased(key, ...)
+	local cb = keyReleaseCallback[key]
+	if cb then
+		local t, stack, s = unpack(cb)
+		if t.keyreleased and captureIndex[t] then
+			push(unpack(stack))
+			scissor.push(unpack(s))
+			t:keyreleased(key, ...)
+			scissor.pop()
+			pop()
 		end
 	end
+	releaseCallback[key] = nil
 end
 
 local function textinput(...)
-	if focused and focused.textinput then
-		for i = #captures, 1, -1 do
-			local t, stack, s = unpack(captures[i])
-			if isFocused(t) then
+	local i = captureIndex[focused or false]
+	if i then
+		local t, stack, s = unpack(captures[i])
+		while t do
+			i = captureIndex[t]
+			if i then
+				local t, stack, s = unpack(captures[i])
 				push(unpack(stack))
 				scissor.push(unpack(s))
-				focused.textinput(t, ...)
+				if t.textinput and t:textinput(...) or t.textinput == nil then
+					scissor.pop()
+					pop()
+					return
+				end
 				scissor.pop()
 				pop()
-				break
 			end
+			t = t.parent
 		end
 	end
 end
 
 local function mousemoved(...)
-	if focused and focused.mousemoved then
-		for i = #captures, 1, -1 do
-			local t, stack, s = unpack(captures[i])
-			if isFocused(t) then
-				push(unpack(stack))
-				scissor.push(unpack(s))
-				focused.mousemoved(t, ...)
-				scissor.pop()
-				pop()
-				break
-			end
-		end
+	local i = captureIndex[focused or false]
+	if i and focused.mousemoved then
+		local t, stack, s = unpack(captures[i])
+		push(unpack(stack))
+		scissor.push(unpack(s))
+		t:mousemoved(...)
+		scissor.pop()
+		pop()
 	end
+end
+
+local function wheelmoved(...)
+	local i = captureIndex[hovered or false]
+	if i and hovered.wheelmoved then
+		local t, stack, s = unpack(captures[i])
+		push(unpack(stack))
+		scissor.push(unpack(s))
+		t:wheelmoved(...)
+		scissor.pop()
+		pop()
+	end
+end
+
+local function isInAABB(x, y, x1, y1, x2, y2) return x >= x1 and x < x2 and y >= y1 and y < y2 end
+
+local function isInScissor(x, y)
+	local x1, y1, x2, y2 = scissor.get()
+	if x1 then return isInAABB(x, y, x1, y1, x2, y2) end
+	return true
+end
+
+local function isInBounds(x, y)
+	return isInAABB(x, y, getBounds())
+end
+
+local function mousehover(x, y)
+	for i = #captures, 1, -1 do
+		local t, stack, s = unpack(captures[i])
+		push(unpack(stack))
+		scissor.push(unpack(s))
+		
+		if isInScissor(x, y) and
+		(t.mousehover and t:mousehover(x, y)) or
+		(not t.mousehover and isInBounds(x, y)) then
+			hovered = t
+			
+			scissor.pop()
+			pop()
+			return
+		end
+		
+		scissor.pop()
+		pop()
+	end
+	hovered = nil
 end
 
 local imageMode = {
@@ -504,6 +589,7 @@ local function update(dt)
 		local t, stack, s = unpack(captures[i])
 		if t.update then t:update(dt) end
 	end
+	mousehover(love.mouse.getPosition())
 	clearCaptures()
 end
 
@@ -525,7 +611,6 @@ return setmetatable({
 	getY = getY,
 	getWidth = getWidth,
 	getHeight = getHeight,
-	isInBounds = isInBounds,
 	isHovered = isHovered,
 	align = align,
 	translate = translate,
@@ -536,6 +621,7 @@ return setmetatable({
 	mousepressed = mousepressed,
 	mousereleased = mousereleased,
 	mousemoved = mousemoved,
+	wheelmoved = wheelmoved,
 	keypressed = keypressed,
 	keyreleased = keyreleased,
 	textinput = textinput,

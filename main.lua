@@ -88,3 +88,7 @@ end
 function love.mousemoved(...)
 	bounds.mousemoved(...)
 end
+
+function love.wheelmoved(...)
+	bounds.wheelmoved(...)
+end
