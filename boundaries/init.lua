@@ -500,6 +500,10 @@ local function label(text, horizontal, vertical)
 end
 
 local function update(dt)
+	for i = #captures, 1, -1 do
+		local t, stack, s = unpack(captures[i])
+		if t.update then t:update(dt) end
+	end
 	clearCaptures()
 end
 
