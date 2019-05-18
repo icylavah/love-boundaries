@@ -8,6 +8,7 @@ local fontBig
 local example
 local examples = require 'examples.list'
 
+local root
 local buttons
 local function action(self) example = require(self.path)() end
 local function draw(self)
@@ -19,42 +20,66 @@ local function draw(self)
 	color.pop()
 end
 
+local function text(self)
+	return self.path
+end
+
 function love.load(arg)
 	fontBig = love.graphics.newFont(24)
+	love.keyboard.setKeyRepeat(true)
+	
+	root = bounds.basic:new()
 	
 	buttons = {}
 	for _,p in ipairs(examples) do
-		local b = button()
+		local b = button:new()
 		b.path = p
 		b.action = action
-		b.draw = draw
-		b.font = font
+		b.text = text
+		b.font = fontBig
+		b.parent = root
 		
 		table.insert(buttons, b)
 	end
-end
-
-local function picker()
-	bounds.clearCaptures()
 	
-	bounds.push()
+	root.next = buttons[1]
+	root.previous = buttons[#buttons]
+	root.keymap = {
+		escape = function(self)
+			love.event.quit()
+		end
+	}
+	root.backgroundColor = {0, 0, 0, 0}
+	bounds.setFocused(root)
 	
-	local r = {}
-	for i = 1, #buttons do r[i] = 1 end
-	
-	bounds.slice('vertical', r)
-	for _,b in ipairs(buttons) do
-		bounds.align('center', 'center', bounds.getWidth() - 32, 50)
-		b:place()
-		bounds.pop()
-		bounds.next()
+	for i,b in ipairs(buttons) do
+		b.next = buttons[(i - 1 + 1) % #buttons + 1]
+		b.previous = buttons[(i - 1 - 1 + #buttons) % #buttons + 1]
 	end
-	
-	bounds.pop()
 end
 
 function love.update(dt)
 	bounds.update(dt)
+end
+
+local function picker()
+	bounds.push()
+	
+	root:place()
+	bounds.solid(0.4, 0.4, 0.4, 1)
+	
+	local r = {}
+	for i = 1, #buttons do r[i] = 1 end
+	
+	bounds.pad(math.min(math.floor(bounds.getWidth() / 2) - 8, 64) .. 'px')
+	for i,b in ipairs(buttons) do
+		bounds.align('center', (i - 1) / (#buttons - 1), bounds.getWidth(), 50)
+		b:place()
+		bounds.pop()
+	end
+	bounds.pop()
+	
+	bounds.pop()
 end
 
 function love.draw()

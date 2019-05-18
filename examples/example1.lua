@@ -10,7 +10,7 @@ return function()
 		bounds.push()
 			font.push(fontBig)
 				local f = font.get()
-				local lines = love.graphics.getHeight() / (f:getHeight() * f:getLineHeight())
+				local lines = bounds.getHeight() / (f:getHeight() * f:getLineHeight())
 				lines = math.max(1, math.floor(lines))
 				for i,w in bounds.slice('vertical', lines) do
 					bounds.solid(unpack((select(i % 2 + 1, {0.8, 0.5, 0.5}, {0.3, 0.3, 0.5}))))

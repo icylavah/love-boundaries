@@ -5,6 +5,17 @@ local weakKeys = {__mode = 'k'}
 local function getStackLimit() return stackLimit end
 local function setStackLimit(limit) stackLimit = limit end
 
+local lmsc = love.mouse.setCursor
+local lmgc = love.mouse.getCursor
+
+local cursor = lmgc()
+function love.mouse.setCursor(c) cursor = c end
+function love.mouse.getCursor() return cursor end
+
+local function setCursor(c)
+	lmsc(c or cursor)
+end
+
 local req = ...
 local function tryRequire(mod)
 	local status, result = pcall(require, req .. '.' .. mod)
@@ -346,6 +357,10 @@ local function getFocused()
 	return focused
 end
 
+local function setFocused(t)
+	focused = t
+end
+
 local function isFocused(self, type)
 	local rel = assert(checkRelation[type or 'self'], format('boundaries.isFocused(): invalid focus type \'%s\'', type))
 	return rel(self, focused)
@@ -590,6 +605,17 @@ local function update(dt)
 		if t.update then t:update(dt) end
 	end
 	mousehover(love.mouse.getPosition())
+	
+	if hovered then
+		local c = hovered.cursor
+		if type(c) == 'function' then c = c(hovered) end
+		if type(c) == 'string' then c = love.mouse.getSystemCursor(c) end
+		if not c then c = love.mouse.getSystemCursor('arrow') end
+		setCursor(c)
+	else
+		setCursor()
+	end
+	
 	clearCaptures()
 end
 
@@ -629,6 +655,7 @@ return setmetatable({
 	defocus = defocus,
 	isActive = isActive,
 	getFocused = getFocused,
+	setFocused = setFocused,
 	isFocused = isFocused,
 	clearCaptures = clearCaptures,
 	update = update,
