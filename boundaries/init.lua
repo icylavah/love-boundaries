@@ -27,6 +27,7 @@ local scissor = tryRequire('scissor')
 local color   = tryRequire('color')
 local font    = tryRequire('font')
 local canvas  = tryRequire('canvas')
+local line    = tryRequire('line')
 
 local stack = {}
 
@@ -577,17 +578,68 @@ local imageMode = {
 		local iw, ih = img:getDimensions()
 		local sx, sy = w / iw, h / ih
 		love.graphics.draw(img, round(x + (w - iw * sx) / 2), round(y + (h - ih * sy) / 2), 0, sx, sy)
+	end,
+	texture = function(img, horizontal, vertical)
+		local iw, ih = img:getDimensions()
+		local x, y, w, h = getRectangle()
+		local wr, hr = math.ceil(w / iw), math.ceil(h / ih)
+		
+		local offx, offy = w * horizontal % iw, h * vertical % ih
+		
+		scissor.pushIntersect(x, y, w, h)
+		for y = 0, hr + 1 do
+			for x = 0, wr + 1 do
+				love.graphics.draw(img, round((x - 1) * iw + offx), round((y - 1) * ih + offy))
+			end
+		end
+		scissor.pop()
 	end
 }
 
 local function image(mode, img, ...)
-	imageMode[mode or 'fit'](img)
+	imageMode[mode or 'fit'](img, ...)
 end
 
 local function solid(r, g, b, a)
 	color.push(r, g, b, a or 1)
 	love.graphics.rectangle('fill', getRectangle())
 	color.pop()
+end
+
+local function outline(width, r, g, b, a)
+	local x, y, w, h = getRectangle()
+	if width * 2 >= w or width * 2 >= h then
+		solid(r, g, b, a)
+		return
+	end
+	
+	color.push(r, g, b, a or 1)
+	local lw2 = width / 2
+	line.pushWidth(width)
+	love.graphics.rectangle('line', x + lw2, y + lw2, w - width, h - width)
+	line.popWidth()
+	color.pop()
+end
+
+local function stripes(width, angle)
+	angle = angle or -math.pi / 4
+	local x, y, w, h = getRectangle()
+	local len = (math.sqrt(w * w + h * h) + width) / 2
+	x, y = round(x + w / 2), round(y + h / 2)
+	local nx, ny = math.cos(angle), math.sin(angle)
+	local offx, offy = nx * len, ny * len
+	local offlx, offly = ny * width * 2, -nx * width * 2
+	scissor.pushIntersect(getRectangle())
+	line.pushWidth(width)
+	local limit = math.ceil(len / width / 2)
+	for i = -limit, limit do
+		love.graphics.line(
+			x - offx + offlx * i, y - offy + offly * i,
+			x + offx + offlx * i, y + offy + offly * i
+		)
+	end
+	line.popWidth()
+	scissor.pop()
 end
 
 local function label(text, horizontal, vertical)
@@ -602,7 +654,11 @@ end
 local function update(dt)
 	for i = #captures, 1, -1 do
 		local t, stack, s = unpack(captures[i])
+		push(unpack(stack))
+		scissor.push(unpack(s))
 		if t.update then t:update(dt) end
+		scissor.pop()
+		pop()
 	end
 	mousehover(love.mouse.getPosition())
 	
@@ -642,6 +698,8 @@ return setmetatable({
 	translate = translate,
 	image = image,
 	solid = solid,
+	outline = outline,
+	stripes = stripes,
 	label = label,
 	capture = capture,
 	mousepressed = mousepressed,

@@ -1,8 +1,77 @@
 local path = (...):gsub('/', '.'):gsub('\\', '.'):gsub('%.[^%.]+$', '')
 
-local ui = require(path)
-local font = require(path .. '.font')
-local color = require(path .. '.color')
+local bounds  = require(path)
+local font    = bounds.font
+local color   = bounds.color
+local scissor = bounds.scissor
+local line    = bounds.line
+
+local field = bounds.basic:extend()
+
+
+field.foregroundColor = {0, 0, 0, 1}
+field.backgroundColor = {1, 1, 1, 1}
+field.selectionBackgroundColor = {0.2, 0.2, 0.8, 1}
+field.selectionForegroundColor = {1, 1, 1, 1}
+field.emptyForegroundColor = {0.5, 0.5, 0.5, 1}
+field.cursor = 'ibeam'
+
+field.text = ''
+field.emptyText = ''
+field.cursorPos = 0
+field.selectOff = 0
+field.padSide = 4
+field.isDragged = false
+
+function field:draw()
+	-- background and outline
+	bounds.solid(unpack(self.backgroundColor))
+	bounds.outline(1, unpack(self.foregroundColor))
+	
+	bounds.pad(0, self.padSide .. 'px', 0)
+		local x, y, w, h = bounds.getRectangle()
+		
+		local f = self.font or font.get()
+		font.set(f)
+		
+		scissor.pushIntersect(x, y, w, h)
+		
+		local fh = f:getHeight()
+		local yOff = math.floor((h - fh) / 2 + 0.5)
+		
+		color.push(unpack(self.foregroundColor))
+		if self.selectOff == 0 then
+			-- text
+			if #self.text == 0 then
+				color.push(unpack(self.emptyForegroundColor))
+				love.graphics.print(self.emptyText, x, y + yOff)
+				color.pop()
+			else
+				love.graphics.print(self.text, x, y + yOff)
+			end
+			-- cursor position
+			if bounds.isFocused(self) then
+				local xOff = f:getWidth(self.text:sub(1, self.cursorPos))
+				line.pushWidth(1)
+				love.graphics.line(x + xOff + 0.5, y + yOff + 0.5, x + xOff + 0.5, y + yOff + fh + 0.5)
+				line.popWidth()
+			end
+		else
+			local a, b = self:getPositions()
+			local ap, bp = f:getWidth(self.text:sub(1, a)), f:getWidth(self.text:sub(1, b))
+			color.push(unpack(self.selectionBackgroundColor))
+			love.graphics.rectangle('fill', x + ap, y + yOff, bp - ap, fh)
+			color.set(unpack(self.selectionForegroundColor))
+			love.graphics.print(self.text:sub(a + 1, b), x + ap, y + yOff)
+			color.pop()
+			love.graphics.print(self.text:sub(1, a), x, y + yOff)
+			love.graphics.print(self.text:sub(b + 1, -1), x + bp, y + yOff)
+		end
+		color.pop()
+	
+		scissor.pop()
+	bounds.pop()
+end
 
 local function findCursorPosition(text, font, x)
 	local w = 0
@@ -18,212 +87,147 @@ local function findCursorPosition(text, font, x)
 	return textLen
 end
 
-local function sortAB(a, b)
-	if a > b then
-		return b, a
-	end
+function field:getPositions()
+	if self.selectOff == 0 then return self.cursorPos, self.cursorPos end
+	local a = self.cursorPos
+	local b = a + self.selectOff
+	if a > b then a, b = b, a end
 	return a, b
 end
 
-local function resetTime(self)
-	self.time = love.timer.getTime()
+function field:getSelection()
+	local a, b = self:getPositions()
+	if a == b then return '' end
+	return self.text:sub(a + 1, b)
 end
 
-return function()
-	return {
-		cursor = 0,
-		selection = 0,
-		time = 0,
-		text = '',
-		mousepressed = {
-			function(self, x, y, button)
-				if ui.isInBounds(x, y) then
-					self.cursor = findCursorPosition(self.text, self.font, x - ui.getX())
-					self.selection = self.cursor
-					
-					--resetTime(self)
-					
-					return true
-				end
-			end
-		},
-		mousemoved = function(self, x, y, dx, dy)
-			if love.mouse.isDown(1) and ui.isActive(self) then
-				self.selection = findCursorPosition(self.text, self.font, x - ui.getX())
-			end
-		end,
-		textinput = function(self, text)
-			local p1, p2 = self.cursor, self.selection
-			if p1 > p2 then p1, p2 = p2, p1 end
-			
-			resetTime(self)
-			
-			self.text = self.text:sub(1, p1) .. text .. self.text:sub(p2 + 1, -1)
-			self.cursor = p1 + 1
-			self.selection = self.cursor
-		end,
-		keypressed = {
-			backspace = function(self, key)
-				local p1, p2 = sortAB(self.cursor, self.selection)
-				if p1 == p2 then
-					if self.cursor > 0 then
-						self.text = self.text:sub(1, self.cursor - 1) .. self.text:sub(self.cursor + 1, -1)
-						self.cursor = self.cursor - 1
-						self.selection = self.cursor
-					end
-				else
-					self.text = self.text:sub(1, p1) .. self.text:sub(p2 + 1, -1)
-					self.cursor = p1
-					self.selection = p1
-				end
-				resetTime(self)
-			end,
-			delete = function(self, key)
-				local p1, p2 = sortAB(self.cursor, self.selection)
-				if p1 == p2 then
-					self.text = self.text:sub(1, self.cursor) .. self.text:sub(self.cursor + 2, -1)
-				else
-					self.text = self.text:sub(1, p1) .. self.text:sub(p2 + 1, -1)
-					self.cursor = p1
-					self.selection = p1
-				end
-				resetTime(self)
-			end,
-			left = function(self, key)
-				local p1, p2 = sortAB(self.cursor, self.selection)
-				if p1 == p2 then
-					self.selection = math.max(self.selection - 1, 0)
-					if not love.keyboard.isDown('lshift', 'rshift') then
-						self.cursor = self.selection
-					end
-				else
-					if love.keyboard.isDown('lshift', 'rshift') then
-						self.selection = math.max(self.selection - 1, 0)
-					else
-						self.cursor = p1
-						self.selection = p1
-					end
-				end
-				resetTime(self)
-			end,
-			right = function(self, key)
-				local p1, p2 = sortAB(self.cursor, self.selection)
-				if p1 == p2 then
-					self.selection = math.min(self.selection + 1, #self.text)
-					if not love.keyboard.isDown('lshift', 'rshift') then
-						self.cursor = self.selection
-					end
-				else
-					if love.keyboard.isDown('lshift', 'rshift') then
-						self.selection = math.min(self.selection + 1, #self.text)
-					else
-						self.cursor = p2
-						self.selection = p2
-					end
-				end
-				resetTime(self)
-			end,
-			x = function(self, key)
-				if love.keyboard.isDown('lctrl', 'rctrl') then
-					local p1, p2 = sortAB(self.cursor, self.selection)
-					if p1 ~= p2 then
-						love.system.setClipboardText(self.text:sub(p1 + 1, p2))
-						self.text = self.text:sub(1, p1) .. self.text:sub(p2 + 1, -1)
-						self.cursor = p1
-						self.selection = p1
-						resetTime(self)
-					end
-				end
-			end,
-			c = function(self, key)
-				if love.keyboard.isDown('lctrl', 'rctrl') then
-					local p1, p2 = sortAB(self.cursor, self.selection)
-					if p1 ~= p2 then
-						love.system.setClipboardText(self.text:sub(p1 + 1, p2))
-					end
-				end
-			end,
-			v = function(self, key)
-				if love.keyboard.isDown('lctrl', 'rctrl') then
-					local p1, p2 = sortAB(self.cursor, self.selection)
-					local cbt = love.system.getClipboardText()
-					self.text = self.text:sub(1, p1) .. cbt .. self.text:sub(p2 + 1, -1)
-					self.cursor = p1 + #cbt
-					self.selection = p1 + #cbt
-					resetTime(self)
-				end
-			end,
-			a = function(self, key)
-				if love.keyboard.isDown('lctrl', 'rctrl') then
-					self.cursor = 0
-					self.selection = #self.text
-				end
-			end,
-			escape = function(self, key)
-				self.selection = self.cursor
-				resetTime(self)
-			end,
-			home = function(self, key)
-				self.cursor = 0
-				self.selection = 0
-				resetTime(self)
-			end,
-			['end'] = function(self, key)
-				self.cursor = #self.text
-				self.selection = #self.text
-				resetTime(self)
-			end,
-		},
-		draw = function(self)
-			local f, t = self.font, self.text
-			local w, h = f:getWidth(t), f:getHeight()
-			font.push(f)
-				--[
-				ui.align(0, 0.5, w, h)
-					local x, y = ui.getPosition()
-					
-					local p1, p2 = sortAB(self.cursor, self.selection)
-					if p1 ~= p2 then
-						if ui.isFocused(self) and love.window.hasFocus() then
-							color.push(0.2, 0.2, 0.8)
-						else
-							color.push(0.5, 0.5, 0.5)
-						end
-							local r1 = self.font:getWidth(self.text:sub(1, p1))
-							local r2 = self.font:getWidth(self.text:sub(1, p2))
-							--local tw = self.font:getWidth(self.text:sub(p1 + 1, p2))
-							--local tox = self.font:getWidth(self.text:sub(1, p2))
-							love.graphics.rectangle('fill', x + r1, y, r2 - r1, h)
-						color.pop()
-					end
-					
-					color.push(0, 0, 0, 1)
-						if p1 == p2 then
-							love.graphics.print(t, x, y)
-						else
-							local t1 = t:sub(1, p1)
-							local t2 = t:sub(p1 + 1, p2)
-							local t3 = t:sub(p2 + 1, -1)
-							local w1 = f:getWidth(t1 .. t2)
-							local w2 = f:getWidth(t2)
-							local w3 = f:getWidth(t3)
-							love.graphics.print(t1, x, y)
-							color.push(1, 1, 1, 1)
-								love.graphics.print(t2, x + w1 - w2, y)
-							color.pop()
-							love.graphics.print(t3, x + w - w3, y)
-						end
-						if (love.timer.getTime() - self.time) % 1 < 0.5 and p1 == p2 and ui.isFocused(self) and love.window.hasFocus() then
-							local cursorPosition = f:getWidth(t:sub(1, self.cursor))
-							love.graphics.line(x + cursorPosition + 0.5, y + 0.5, x + cursorPosition + 0.5, y + h + 0.5)
-						end
-					color.pop()
-				ui.pop()
-			font.pop()
-		end,
-		place = function(self)
-			if self.draw then self:draw() end
-			ui.capture(self)
-		end
-	}
+function field:insertText(text)
+	if self.selectOff ~= 0 then self:deleteSelection() end
+	self.text = self.text:sub(1, self.cursorPos) .. text .. self.text:sub(self.cursorPos + 1, -1)
+	self.cursorPos = self.cursorPos + #text
 end
+
+function field:deleteSelection()
+	if self.selectOff == 0 then return end
+	
+	local a, b = self:getPositions()
+	
+	self.text = self.text:sub(1, a) .. self.text:sub(b + 1, -1)
+	
+	if self.selectOff < 0 then self.cursorPos = self.cursorPos + self.selectOff end
+	self.selectOff = 0
+end
+
+field.keymap = {
+	right = function(self, key, code, isrepeat)
+		if love.keyboard.isDown('lshift', 'rshift') then
+			if self.cursorPos ~= #self.text then
+				self.selectOff = self.selectOff - 1
+				self.cursorPos = math.min(self.cursorPos + 1, #self.text)
+			end
+		elseif self.selectOff == 0 then
+			self.cursorPos = math.min(self.cursorPos + 1, #self.text)
+		else
+			local a, b = self:getPositions()
+			self.selectOff = 0
+			self.cursorPos = b
+		end
+	end,
+	left = function(self, key, code, isrepeat)
+		if love.keyboard.isDown('lshift', 'rshift') then
+			if self.cursorPos ~= 0 then
+				self.selectOff = self.selectOff + 1
+				self.cursorPos = math.max(self.cursorPos - 1, 0)
+			end
+		elseif self.selectOff == 0 then
+			self.cursorPos = math.max(self.cursorPos - 1, 0)
+		else
+			local a, b = self:getPositions()
+			self.selectOff = 0
+			self.cursorPos = a
+		end
+	end,
+	backspace = function(self, key, code, isrepeat)
+		if self.selectOff == 0 and self.cursorPos > 0 then
+			self.text = self.text:sub(1, self.cursorPos - 1) .. self.text:sub(self.cursorPos + 1, -1)
+			self.cursorPos = self.cursorPos - 1
+		else
+			self:deleteSelection()
+		end
+	end,
+	delete = function(self, key, code, isrepeat)
+		if self.selectOff == 0 and self.cursorPos < #self.text then
+			self.text = self.text:sub(1, self.cursorPos) .. self.text:sub(self.cursorPos + 2, -1)
+		else
+			self:deleteSelection()
+		end
+	end,
+	c = function(self, key, code, isrepeat)
+		if love.keyboard.isDown('lctrl', 'rctrl') then
+			love.system.setClipboardText(self:getSelection())
+		else
+			return false
+		end
+	end,
+	x = function(self, key, code, isrepeat)
+		if love.keyboard.isDown('lctrl', 'rctrl') then
+			love.system.setClipboardText(self:getSelection())
+			self:deleteSelection()
+		else
+			return false
+		end
+	end,
+	v = function(self, key, code, isrepeat)
+		if love.keyboard.isDown('lctrl', 'rctrl') then
+			self:insertText(love.system.getClipboardText())
+		else
+			return false
+		end
+	end,
+	a = function(self, key, code, isrepeat)
+		if love.keyboard.isDown('lctrl', 'rctrl') then
+			self.cursorPos = #self.text
+			self.selectOff = -self.cursorPos
+		else
+			return false
+		end
+	end,
+	home = function(self, key, code, isrepeat)
+		self.cursorPos = 0
+		self.selectOff = 0
+	end,
+	['end'] = function(self, key, code, isrepeat)
+		self.cursorPos = #self.text
+		self.selectOff = 0
+	end,
+	escape = function(self, key, code, isrepeat)
+		self.selectOff = 0
+	end
+}
+
+function field:textinput(text)
+	self:insertText(text)
+end
+
+function field:mousepressed(x, y)
+	local f = self.font or font.get()
+	self.cursorPos = findCursorPosition(self.text, f, x - bounds.getX() - self.padSide)
+	self.selectOff = 0
+	self.isDragged = true
+	return true
+end
+
+function field:mousereleased(x, y)
+	self.isDragged = false
+end
+
+function field:update(dt)
+	if self.isDragged then
+		local f = self.font or font.get()
+		local c = findCursorPosition(self.text, f, love.mouse.getX() - bounds.getX() - self.padSide)
+		self.selectOff = self.selectOff + self.cursorPos - c
+		self.cursorPos = c
+	end
+end
+
+return field
